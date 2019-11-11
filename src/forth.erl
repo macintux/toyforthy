@@ -1,7 +1,6 @@
 -module(forth).
 
 -export([evaluate/1]).
--compile(export_all).
 
 
 trim(Str) ->
@@ -20,11 +19,6 @@ maybe_convert_int(Str) ->
 
 convert_ints(Tokens) ->
     lists:map(fun maybe_convert_int/1, Tokens).
-
-look_for(LastToken, [LastToken|T], Accum) ->
-    {lists:reverse(Accum), T};
-look_for(LastToken, [Token|T], Accum) ->
-    look_for(LastToken, T, [Token|Accum]).
 
 evaluate(Instructions) ->
     evaluate(parse(Instructions), []).
