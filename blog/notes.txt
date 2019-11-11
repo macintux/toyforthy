@@ -1,4 +1,58 @@
 * Start with pattern matching
+* Talk about the pain of one wall of text with so much boilerplate,
+  despite how easy the code is to write
 * Highlight the pain of adding a new parameter (Words) to every branch
 * Highlight the pain of adding useful error messages
 * Talk about the switch to a dictionary of lambdas.
+  * Making evaluate one argument so I can pass the results from interpret directly
+* Early mistake in defining the word dictionary: copying the same
+  patterns from the function heads. Stupid, copying all that
+  boilerplate, just make each function take the arguments it needs.
+
+"When your favorite tool is a hammer, everything looks like a nail."
+(I do love pattern matching.)
+
+* How to pass arguments? List or individually? Obviously easier as a list.
+* Problem of how to update the words dictionary. Options:
+  * Every otherwise-simple function in the word dictionary takes and
+    returns the dictionary
+  * Every otherwise-simple function returns a flag indicating whether
+    the result should be added to the dictionary.
+  * Only the word definition function updates the word dictionary
+    * Ha, j/k, can't do that in Erlang
+
+  = So the functions started out taking 2 arguments (stack values and
+    stacks to pattern match the returning values) and eventually took
+    2 arguments (stack values and word dictionary)
+
+* Had to change the return values from the lambdas *AGAIN* once I got
+  to `dup` because it had to return 2 values to put at the top of the
+  stack, not just 1.
+
+* So after each tweak it gets a little more complex, but the end
+  result is still fairly tidy, especially when laid out neatly:
+
+       {"+",     {2,   fun([A, B], W) -> {[B+A], W} end}},
+       {"-",     {2,   fun([A, B], W) -> {[B-A], W} end}},
+       {"*",     {2,   fun([A, B], W) -> {[B*A], W} end}},
+       {"/",     {2,   fun([A, B], W) -> {[B div A], W} end}},
+       {"dup",   {1,   fun([A], W)    -> {[A, A], W} end}},
+       {"swap",  {2,   fun([A, B], W) -> {[B, A], W} end}},
+       {"over",  {2,   fun([A, B], W) -> {[B, A, B], W} end}},
+
+  ...and then we hit word definition and I realize there is no static arity!
+
+  However, we can overload that arity element of the tuple.
+
+  Then I realize that the Exercism test code actually gives me an easy
+  out: each time a new word is defined, it is passed as an independent
+  string. But, I don't want to take this cheat if I can avoid it; I'd
+  rather follow the Forth "standard" (a topic deserving a blog post by
+  someone who understands Forth, and I should find one to link here).
+
+  I also need to figure out why my code was working when the strings
+  sent to evaluate/1 are actually a list of strings; somehow I'd
+  overlooked that but my code worked anyway...why?
+
+  So I decide at this point I should save my sanity and test the code
+  as I have it before I define words.
