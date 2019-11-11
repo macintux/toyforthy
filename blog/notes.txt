@@ -1,0 +1,4 @@
+* Start with pattern matching
+* Highlight the pain of adding a new parameter (Words) to every branch
+* Highlight the pain of adding useful error messages
+* Talk about the switch to a dictionary of lambdas.
