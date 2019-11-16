@@ -54,5 +54,195 @@
   sent to evaluate/1 are actually a list of strings; somehow I'd
   overlooked that but my code worked anyway...why?
 
+      * Just because, that's why. string:split handles it gracefully.
+
+> string:split(["foo bar", "baz", "a b c d"], " ", all).
+["foo","barbaza","b","c","d"]
+        ^^^^^^^
+        Oops, Not so gracefully. I'm going to have to mangle my input
+        to treat it as one stream.
+
+        I'm reminded how awkward string processing can be in
+        Erlang. Perl, wherefore art thou?
+
   So I decide at this point I should save my sanity and test the code
   as I have it before I define words.
+
+==== Words!
+
+My initial plan was to maintain the two-element tuple structure
+
+Add to my default words:
+       {";",     {fun(S) -> look_for(":", S, []) end,
+                  fun define_word/2}}
+
+And to interpret as a new head:
+interpret(_Next, {ok, {StackFun, ExecuteFun}}, RemainingInputs, Stack, Words)
+  when is_function(StackFun) ->
+    {ToProcess, StackTail} = StackFun(Stack),
+    {Result, NewWords} = ExecuteFun(ToProcess, Words),
+    {RemainingInputs, Result ++ StackTail, NewWords};
+
+And this would work, but what I quickly realized is that to support
+the new words I would need an entirely new execution structure. How do
+I know the arity of a user-defined word? I don't.
+
+A new word is effectively a way of saying "When you see this word,
+replace it with these other words", at least for the purposes of this
+tiny Forth implementation.
+
+So for new words, I don't need to touch the accumulated stack;
+instead, I can just put the replacement words back onto my input queue
+(in the correct order) and return to real_evaluate.
+
+And perhaps the "new word" word (": ... ;", whatever Forth users call
+that structure) could be interpreted using this new flow. Instead of
+just continuing to throw things onto the stack after I see ":" and
+wait for ";", I could process the inputs in a separate function and
+leave the stack untouched.
+
+But after writing the idea down, I realized what I was proposing was
+creating a *new*, special case, temporary stack, and that feels wrong.
+
+So I'm back to the question: how do I represent the new arbitrary
+functions in my data structure?
+
+Answer: my outer tuple will be a word and a list, instead of a word and a tuple.
+
+interpret(_Next, {ok, ReplacementWords}, RemainingInputs, Stack, Words)
+  when is_list(ReplacementWords) ->
+    {ReplacementWords ++ RemainingInputs, Stack, Words};
+
+Effectively I find myself bouncing between, and updating, three
+structures when I'm trying to sort out the data flow: the function I'm
+adding to process the input (define_word/2 in this case), the data
+structure I'm manipulating, and the documentation describing all of
+the above.
+
+Everything works, except it doesn't. Sometimes my word definition
+works, sometimes I end up in an infinite loop, and I haven't figured
+out why using the old "print everything out" strategy. Time to build
+and deploy redbug.
+
+Well, that was entertaining. It's been so long since I've done any
+work on Erlang, and even longer since I've had to set up my own
+environment instead of relying on the infrastructure Basho had
+configured before I ever started there, that it took me a good half
+hour just to get redbug installed in my path.
+
+Discovered that it has been extracted from eper.
+
+Could have used rebar to automatically load it but didn't want to open
+that can of worms yet.
+
+* Remember to use kerl (add a default invocation to my bash_profile)
+* Download and make it
+* Run erl, get code path, discover that it won't show me the whole data structure, reconstruct how to iterate over it and print each component (too much Python)
+  * lists:foreach(fun(P) -> io:format("~s~n", [P]) end, code:get_path()).
+    * lists:foreach(lambda p..wait, no
+    * lists:foreach(fun(p) -> io:format("~s~n", [p]) end, code:get_path()).
+      * No, wait, that also fails with some really perverse error message
+      * finally remember
+    * lists:foreach(fun(P) -> io:format("~s~n", [P]) end, code:get_path()).
+* Discover there's nothing in there equivalent to "site_lib" in Python/Perl
+* Configure ERL_LIBS in my bash_profile, but to the directory with the beams
+  * export ERL_LIBS="/Users/jdaily/github/redbug/_build/default/lib/redbug/ebin"
+* Run erl again
+* Run above foreach loop
+* Don't see the directory
+* Keep experimenting, keep reading online
+* Find https://stevemorin.blogspot.com/2011/07/erlang-module-load-path-how-to-erllibs.html
+  * "NOTE:the lib path will not load if it doesn't contain a ebin dir"
+* Change ERL_LIBS
+  * export ERL_LIBS="/Users/jdaily/github/redbug/_build/default/lib/redbug"
+* NOW it works
+
+Except it doesn't.
+
+redbug:start("forth:look_for->return").
+redbug:start("forth:look_for->return").
+** exception error: undefined function redbug:start/1
+21> m(redbug).
+m(redbug).
+** exception error: undefined function redbug:module_info/0
+     in function  c:m/1 (c.erl, line 722)
+22>
+
+dafuq?
+
+Guess what?
+
+ERL_LIB has to point to the directory containing ebin. code:add_path/1
+(or code:add_patha/1 which I used) has to point to the ebin directory
+itself. MADNESS.
+
+Anyway.
+
+Now I can troubleshoot this.
+
+> redbug:start("forth:look_for->return").
+redbug:start("forth:look_for->return").
+{45,1}
+> forth:evaluate(["1 : dupw dup ; dupw"]).
+
+
+% 20:49:35 <0.88.0>({erlang,apply,2})
+% forth:look_for(":", ["dupw","dupw",":",1], [])
+
+% 20:49:35 <0.88.0>(dead)
+% forth:look_for(":", ["dupw",":",1], ["dupw"])
+
+% 20:49:35 <0.88.0>(dead)
+% forth:look_for(":", [":",1], ["dupw","dupw"])
+
+% 20:49:35 <0.88.0>(dead)
+% forth:look_for/3 -> {["dupw","dupw"],[1]}
+
+% 20:49:35 <0.88.0>(dead)
+% forth:look_for/3 -> {["dupw","dupw"],[1]}
+
+% 20:49:35 <0.88.0>(dead)
+% forth:look_for/3 -> {["dupw","dupw"],[1]}
+
+I had to re-read this a few times before I finally got the joke.
+
+My code was doing exactly what I told it to, like it always does.
+
+By the time I saw the ";" to end the word definition and invoked
+look_for/3 to find the originating ":", I had already processed a
+"dup" on "dupw". So instead of "dupw" being an alias to "dup", it was
+an alias to itself, hence my infinite loop.
+
+One approach would be to intercept the ":" that starts the word
+definition and put the interpreter into a special mode that wouldn't
+invoke any words it recognized, just put them on the stack. Let's see
+how that might work.
+
+One of the joys of Erlang, and FP in general, is a lack of mutable
+globals. When you call a function, it should always give you back the
+same results for the same inputs.
+
+And you don't typically have global variables as a "hidden" input.
+
+So for interpret/4 to know that we're no longer in "run" mode but our
+new "define" mode, we need yet another parameter to the function, to
+make it interpret/5.
+
+(There are other options, such as dropping a mode setting into the
+Words dictionary, but that would be the sort of ugly thing you'd do as
+an emergency bug fix in a production environment while you work out
+the real solution.)
+
+...starting to look like an FSM.
+
+Ok, attempt #2. Let's switch from interpret/5 to a new accumulating function when we see ":". We define a new function head for interpret/5 for just a function as the action part of the words tuple, and like interpret itself, we need the function to report back what's left of the inputs, what the new stack looks like, and the new words dictionary.
+
+
+We call the binding, appropriately enough, `BypassFun`; it operates as
+its own variant of the interpret/5 function, bypassing it temporarily.
+
+Will we need this pattern for anything other than word definition? Well, definitely not for the scope of this project.
+
+Actually, we *don't* need the stack at all. Consider removing it, but leaving it available for the function makes it more general.
+
+Again, this probably should be a FSM. `accumulate/6` uses the last parameter and first parameter combined as a decision parameter.
