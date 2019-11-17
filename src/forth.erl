@@ -105,7 +105,9 @@ new_word(WordOrNumber, [H|T], Stack, Words, Accum, NewWord) ->
 %% `interpret/5` returns a tuple: `{NewInputs, NewStack, NewWords}`
 %% (the new tokenized input list, the new stack, and the new
 %% dictionary of words)
-
+%%
+%% Any erroneous input should result in an exception; the test code
+%% does not expect useful error messages.
 interpret(_Next, {ok, {define, undefined, BypassFun}}, [H|T], Stack, Words) ->
     {InputTail, NewStack, NewWords} =
         BypassFun(H, T, Stack, Words),
