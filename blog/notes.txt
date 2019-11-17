@@ -360,3 +360,50 @@ The fix is simple, although I still need to figure out why I have to reverse the
 interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
   when is_list(ReplacementWords) ->
     {RemainingInputs, lists:reverse(real_evaluate({ReplacementWords, Stack, OlderWords})), Words};
+
+So now back to my test runs. I have 38 successful tests, but we're getting a new failure, one I expected:
+
+forth_tests: 39_cannot_redefine_numbers_test...*failed*
+in function forth_tests:'-39_cannot_redefine_numbers_test/0-fun-0-'/0 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/test/forth_tests.erl, line 141)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 273)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 71)
+in call from eunit_proc:run_test/1 (eunit_proc.erl, line 510)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 335)
+in call from eunit_proc:handle_test/2 (eunit_proc.erl, line 493)
+in call from eunit_proc:tests_inorder/3 (eunit_proc.erl, line 435)
+in call from eunit_proc:with_timeout/3 (eunit_proc.erl, line 325)
+**error:{assertException,[{module,forth_tests},
+                  {line,141},
+                  {expression,"forth : evaluate ( [ \": 1 2 ;\" ] )"},
+                  {pattern,"{ error , _ , [...] }"},
+                  {unexpected_success,[]}]}
+  output:<<"">>
+
+We can't redefine numbers. Why? Because we can't, that's why. But of course I allow it.
+
+These last two conceptual bugs reflect the model that Exercism
+employs: the deep technical specification of the problem is buried in
+the test. Nowhere in the description does it indicate that numbers
+can't be redefined, or that words carry with them the context at the
+time of their definition.
+
+If I knew Forth with more than a passing familiarity, I would probably know these rules already... although maybe not, because Forth isn't really a language, it's a model of how to design a language. Chuck Moore reportedly creates a new Forth with each new platform.
+
+There *is* a standard definition, but Chuck considers that a flawed approach. He wants it to be tuned to the problem at hand, instead of some idealized Forth.
+
+Anyway, time to get back to the problem. Disallow redefinition of integers.
+
+```new_word(NewWord, _Inputs, _Stack, _Words, [], undefined)
+  when is_integer(NewWord) ->
+    {};
+```
+
+Surprisingly easy, but this highlights a problem with Erlang: this will throw a pattern match error, which allows the test to pass, but would be utterly unhelpful to anyone running the code.
+
+> forth:evaluate([": 1 2 ;"]).
+forth:evaluate([": 1 2 ;"]).
+** exception error: no match of right hand side value {}
+     in function  forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 70)
+     in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 95)
+
+Anyway, we're not (yet?) writing this with actual users in mind, so let's keep making tests pass.

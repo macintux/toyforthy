@@ -54,6 +54,9 @@ new_word(Next, Inputs, Stack, Words) ->
 %% a new definition.
 new_word(":", [H|T], Stack, Words, [], undefined) ->
     new_word(H, T, Stack, Words, [], undefined);
+new_word(NewWord, _Inputs, _Stack, _Words, [], undefined)
+  when is_integer(NewWord) ->
+    {};
 new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
     new_word(H, T, Stack, Words, [], NewWord);
 new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
