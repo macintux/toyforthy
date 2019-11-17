@@ -448,3 +448,17 @@ new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
     new_word(H, T, Stack, Words, [], string:to_lower(NewWord));
 
 And there was much rejoicing.
+
+----
+
+Upon cleanup I noticed that all of the built-in words (other than ":")
+take the word dictionary as an argument because I hadn't realized yet
+":" would be its own beast, so removed those.
+
+I also disliked the type guards when scanning the words dictionary, so
+I converted all values to 3-tuples.
+
+This led me to discovering I had an extraneous function clause in
+interpret dating back to an early attempt to handle defining new
+words. That's a problem with Erlang: it's quite easy to have function
+heads that serve no purpose.

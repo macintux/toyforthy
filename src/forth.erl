@@ -1,7 +1,14 @@
 -module(forth).
 
 -export([evaluate/1]).
-%% -compile(export_all).
+
+%%%%% Tokenization
+
+parse(Instructions) ->
+    convert_ints(collapse(Instructions)).
+
+convert_ints(Tokens) ->
+    lists:map(fun maybe_convert_int/1, Tokens).
 
 %% The inputs as provided by the Exercism tests try to make life
 %% easier to expressing word definitions as distinct strings. I would
@@ -18,9 +25,6 @@ collapse(I) ->
                  lists:flatmap(fun(Str) -> string:split(Str, " ", all) end,
                                          I)).
 
-parse(Instructions) ->
-    convert_ints(collapse(Instructions)).
-
 maybe_convert_int(Str) ->
     case string:to_integer(Str) of
         {Int, []} ->
@@ -29,22 +33,36 @@ maybe_convert_int(Str) ->
             Str
     end.
 
-convert_ints(Tokens) ->
-    lists:map(fun maybe_convert_int/1, Tokens).
+%% Our dictionary of words contains three types of values:
+
+%%   * Built-in words are a 3-tuple: `builtin`, arity and anonymous
+%%     function to take that arity of parameters off the stack (as a
+%%     list) and return a list of new values. The last value on the
+%%     stack is always the first item in the parameter list, and the
+%%     resulting list is prepended to the current stack.
+
+%%   * The word definition word (":") is unique; it supplies a bypass
+%%     function that will be used in place of `interpret/5` to process
+%%     the inputs up to ";". Its value tuple is `define`, `undefined`,
+%%     and the bypass function.
+%%
+%%   * Custom-defined words, not present in this default dictionary,
+%%     will have a 3-tuple with `custom`, a list of words and values
+%%     to treat as replacement input, and *the word dictionary as it
+%%     existed when that word was defined*
 
 default_words() ->
     dict:from_list(
       [
-       {"+",     {2,   fun([A, B], W) -> {[B+A], W} end}},
-       {"-",     {2,   fun([A, B], W) -> {[B-A], W} end}},
-       {"*",     {2,   fun([A, B], W) -> {[B*A], W} end}},
-       {"/",     {2,   fun([A, B], W) -> {[B div A], W} end}},
-       {"dup",   {1,   fun([A], W)    -> {[A, A], W} end}},
-       {"drop",  {1,   fun([_A], W)    -> {[], W} end}},
-       {"swap",  {2,   fun([A, B], W) -> {[B, A], W} end}},
-       {"over",  {2,   fun([A, B], W) -> {[B, A, B], W} end}},
-       %% Words, words, words are important
-       {":",     fun new_word/4 }
+       {"+",     {builtin, 2,   fun([A, B]) ->  [B+A] end}},
+       {"-",     {builtin, 2,   fun([A, B]) ->  [B-A] end}},
+       {"*",     {builtin, 2,   fun([A, B]) ->  [B*A] end}},
+       {"/",     {builtin, 2,   fun([A, B]) ->  [B div A] end}},
+       {"dup",   {builtin, 1,   fun([A])    ->  [A, A] end}},
+       {"drop",  {builtin, 1,   fun([_A])   ->  [] end}},
+       {"swap",  {builtin, 2,   fun([A, B]) ->  [B, A] end}},
+       {"over",  {builtin, 2,   fun([A, B]) ->  [B, A, B] end}},
+       {":",     {define,  undefined, fun new_word/4}}
       ]).
 
 new_word(Next, Inputs, Stack, Words) ->
@@ -60,31 +78,23 @@ new_word(NewWord, _Inputs, _Stack, _Words, [], undefined)
 new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
     new_word(H, T, Stack, Words, [], string:to_lower(NewWord));
 new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
-    {Inputs, Stack, dict:store(NewWord, {lists:reverse(Accum), Words}, Words)};
+    {Inputs, Stack, dict:store(NewWord, {custom, lists:reverse(Accum), Words}, Words)};
 new_word(Word, [H|T], Stack, Words, Accum, NewWord) ->
     new_word(H, T, Stack, Words, [Word|Accum], NewWord).
 
 
-interpret(Next, {ok, BypassFun}, RemainingInputs, Stack, Words)
-  when is_function(BypassFun) ->
+interpret(Next, {ok, {define, undefined, BypassFun}}, Inputs, Stack, Words) ->
     {InputTail, NewStack, NewWords} =
-        BypassFun(Next, RemainingInputs, Stack, Words),
+        BypassFun(Next, Inputs, Stack, Words),
     {InputTail, NewStack, NewWords};
-interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
-  when is_list(ReplacementWords) ->
-    {RemainingInputs, lists:reverse(real_evaluate({ReplacementWords, Stack, OlderWords})), Words};
-interpret(_Next, {ok, {StackFun, ExecuteFun}}, RemainingInputs, Stack, Words)
-  when is_function(StackFun) ->
-    {ToProcess, StackTail} = StackFun(Stack),
-    {Result, NewWords} = ExecuteFun(ToProcess, Words),
-    {RemainingInputs, Result ++ StackTail, NewWords};
-interpret(_Next, {ok, {Arity, Fun}}, RemainingInputs, Stack, Words) ->
+interpret(_Next, {ok, {custom, Replacements, WordsSnapshot}}, Inputs, Stack, Words) ->
+    {Inputs, lists:reverse(real_evaluate({Replacements, Stack, WordsSnapshot})), Words};
+interpret(_Next, {ok, {builtin, Arity, Fun}}, Inputs, Stack, Words) ->
     {Args, StackTail} = lists:split(Arity, Stack),
-    {Result, NewWords} = Fun(Args, Words),
-    {RemainingInputs, Result ++ StackTail, NewWords};
-interpret(Next, error, RemainingInputs, Stack, Words)
-  when is_integer(Next) ->
-    {RemainingInputs, [Next|Stack], Words};
+    Result = Fun(Args),
+    {Inputs, Result ++ StackTail, Words};
+interpret(Next, error, Inputs, Stack, Words) when is_integer(Next) ->
+    {Inputs, [Next|Stack], Words};
 interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
     %% This word wasn't found in our dictionary.
     {}.
