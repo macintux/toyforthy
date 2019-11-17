@@ -40,7 +40,7 @@ maybe_convert_int(Str) ->
 %%     list) and return a list of new values. The last value on the
 %%     stack is always the first item in the parameter list, and the
 %%     resulting list is prepended to the current stack.
-
+%%
 %%   * The word definition word (":") is unique; it supplies a bypass
 %%     function that will be used in place of `interpret/5` to process
 %%     the inputs up to ";". Its value tuple is `define`, `undefined`,
@@ -80,12 +80,51 @@ new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
 new_word(WordOrNumber, [H|T], Stack, Words, Accum, NewWord) ->
     new_word(H, T, Stack, Words, [WordOrNumber|Accum], NewWord).
 
+%% `interpret/5` takes:
+%%
+%%    * The next value discovered in our tokenized input. Typically
+%%      this is ignored because it has already been used to find the
+%%      corresponding value in our dictionary of words, but if the
+%%      next token is a number we will need to know what it is to
+%%      place it on the stack.
+%%
+%%    * The results of the dictionary lookup. Either an `{ok, Value}`
+%%      tuple or `error` if the token does not appear. See the
+%%      comments for `default_words/0` to explain the dictionary
+%%      values.
+%%
+%%    * The remaining tokenized inputs. This list will be modified by
+%%      `interpret` if we encounter a word definition block.
+%%
+%%    * The current stack. Will always be modified except when
+%%      erroneous input is encountered.
+%%
+%%    * The current dictionary of words. Will be modified only when a
+%%      new word definition is encountered.
+%%
+%% `interpret/5` returns a tuple: `{NewInputs, NewStack, NewWords}`
+%% (the new tokenized input list, the new stack, and the new
+%% dictionary of words)
 
 interpret(_Next, {ok, {define, undefined, BypassFun}}, [H|T], Stack, Words) ->
     {InputTail, NewStack, NewWords} =
         BypassFun(H, T, Stack, Words),
     {InputTail, NewStack, NewWords};
 interpret(_Next, {ok, {custom, Replacements, WordsSnapshot}}, Inputs, Stack, Words) ->
+    %% When we encounter a custom word as input, we have to evaluate
+    %% it in the context of the words *as they existed when the word
+    %% was defined*. Thus we invoke `real_evaluate` recursively in
+    %% that context.
+    %%
+    %% Ordinarily we would need to be concerned that the recursive
+    %% invocation of `interpret` might modify the inputs or dictionary
+    %% of words, and that those modifications would be lost because
+    %% `real_evaluate` only returns the results of its evaluation as a
+    %% (reversed) stack of values, but those side-effects are
+    %% precluded because we do not allow new words to be defined as
+    %% part of a custom word.
+    %%
+    %% In short, this is illegal: ": newword : lazynewword value ; value ;"
     {Inputs, lists:reverse(real_evaluate({Replacements, Stack, WordsSnapshot})), Words};
 interpret(_Next, {ok, {builtin, Arity, Fun}}, Inputs, Stack, Words) ->
     {Args, StackTail} = lists:split(Arity, Stack),
@@ -97,15 +136,27 @@ interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
     %% This word wasn't found in our dictionary.
     {}.
 
-
+%% Our API: Pass one or more strings as a list. This will fail if a
+%% string is passed without being nested inside an outer list.
 evaluate(Instructions) ->
     real_evaluate({parse(Instructions), [], default_words()}).
 
+%% Iterate over a list of tokenized inputs, invoking `interpret/5`
+%% with each token, but allowing `interpret` to update any of our
+%% state values, including the list of inputs, so the iteration must
+%% be recursive.
+%%
+%% The 3 state values: our list of inputs, our stack, and our
+%% dictionary of words, both custom and built-in.
 real_evaluate({[], Stack, _Words}) ->
     lists:reverse(Stack);
 real_evaluate({[H|T], Stack, Words}) ->
     real_evaluate(interpret(H, word_lookup(H, Words), T, Stack, Words)).
 
+%% I introduced this indirect lookup because I didn't want to call
+%% `string:to_lower/1` on an integer. As it turns out, that seems to
+%% be safe, at least with Erlang 22.0, but I don't want to assume it's
+%% universally safe.
 word_lookup(Number, _Words) when is_integer(Number) ->
     error;
 word_lookup(MaybeWord, Words) ->
