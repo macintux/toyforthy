@@ -1,7 +1,7 @@
 -module(forth).
 
 -export([evaluate/1]).
-%%-compile(export_all).
+-compile(export_all).
 
 %% The inputs as provided by the Exercism tests try to make life
 %% easier to expressing word definitions as distinct strings. I would
@@ -44,22 +44,22 @@ default_words() ->
        {"swap",  {2,   fun([A, B], W) -> {[B, A], W} end}},
        {"over",  {2,   fun([A, B], W) -> {[B, A, B], W} end}},
        %% Words, words, words are important
-       {":",     fun accumulate/4 }
+       {":",     fun new_word/4 }
       ]).
 
-accumulate(Next, Inputs, Stack, Words) ->
-    accumulate(Next, Inputs, Stack, Words, [], undefined).
+new_word(Next, Inputs, Stack, Words) ->
+    new_word(Next, Inputs, Stack, Words, [], undefined).
 
 %% This function will crash by design if ":" is found in the middle of
 %% a new definition.
-accumulate(":", [H|T], Stack, Words, [], undefined) ->
-    accumulate(H, T, Stack, Words, [], undefined);
-accumulate(NewWord, [H|T], Stack, Words, [], undefined) ->
-    accumulate(H, T, Stack, Words, [], NewWord);
-accumulate(";", Inputs, Stack, Words, Accum, NewWord) ->
-    {Inputs, Stack, dict:store(NewWord, lists:reverse(Accum), Words)};
-accumulate(Word, [H|T], Stack, Words, Accum, NewWord) ->
-    accumulate(H, T, Stack, Words, [Word|Accum], NewWord).
+new_word(":", [H|T], Stack, Words, [], undefined) ->
+    new_word(H, T, Stack, Words, [], undefined);
+new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
+    new_word(H, T, Stack, Words, [], NewWord);
+new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
+    {Inputs, Stack, dict:store(NewWord, {lists:reverse(Accum), Words}, Words)};
+new_word(Word, [H|T], Stack, Words, Accum, NewWord) ->
+    new_word(H, T, Stack, Words, [Word|Accum], NewWord).
 
 
 interpret(Next, {ok, BypassFun}, RemainingInputs, Stack, Words)
@@ -67,9 +67,9 @@ interpret(Next, {ok, BypassFun}, RemainingInputs, Stack, Words)
     {InputTail, NewStack, NewWords} =
         BypassFun(Next, RemainingInputs, Stack, Words),
     {InputTail, NewStack, NewWords};
-interpret(_Next, {ok, ReplacementWords}, RemainingInputs, Stack, Words)
+interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
   when is_list(ReplacementWords) ->
-    {ReplacementWords ++ RemainingInputs, Stack, Words};
+    {RemainingInputs, real_evaluate({ReplacementWords, [], OlderWords}) ++ Stack, Words};
 interpret(_Next, {ok, {StackFun, ExecuteFun}}, RemainingInputs, Stack, Words)
   when is_function(StackFun) ->
     {ToProcess, StackTail} = StackFun(Stack),

@@ -246,3 +246,102 @@ Will we need this pattern for anything other than word definition? Well, definit
 Actually, we *don't* need the stack at all. Consider removing it, but leaving it available for the function makes it more general.
 
 Again, this probably should be a FSM. `accumulate/6` uses the last parameter and first parameter combined as a decision parameter.
+
+So, after more debugging, it's working! Mostly.
+
+Test 37 fails, test 38 times out, every test after that fails to run at all. Let's see what's going on.
+
+```'37_can_use_different_words_with_the_same_name_test'() ->
+    ?assertEqual([5, 6],
+                 forth:evaluate([": foo 5 ;", ": bar foo ;", ": foo 6 ;",
+                                 "bar foo"])).
+```
+
+This test says:
+  Step 1: Define a new word, `foo`, which is replaced by the number 5
+  Step 2: Define a new word, `bar`, which is replaced by `foo`
+  Step 3: Redefine `foo` to be 6
+  Step 4: Invoke bar and foo, and expect 5 and 6
+
+I did not anticipate this. It seems to nullify all of the work I just did!
+
+Maybe.
+
+Essentially my strategy for defining new words assumed a lazy
+evaluation, although I didn't realize it. The replacement list of
+words is not evaluated until needed, by which point in time `foo` has
+been redefined.
+
+What this effectively means, I think, is that I need to take advantage of the fact that Erlang, like most/all(?) functional programming languagues, embraces immutability. I can store the current definition of the words dictionary alongside each newly-defined word. Let's see how that works.
+
+First, I'm going to rename `accumulate`, because it's been bothering
+me. This is a common problem for me, and I imagine I'm not alone: a
+function can't be properly named until you understand what it's really
+doing.
+
+This function is doing three things: it's accumulating a list of
+words, it's doing so while pattern matching Forth's word definition
+mechanism, and it's redefining the words dictionary at the end.
+
+So really it's solely useful for a "new word" operation. Let's call it that.
+
+And we want to redefine what the words dictionary values look like. Currently we have three patterns:
+
+  * {arity, lambda} for built-in words
+  * just a lambda for new word definition
+  * list-of-words for a user-defined word
+
+We'll tweak that last to be {list-of-words, words dictionary}. Once we store it, any tweaks of the active dictionary will not impact the copy we stored locally. Effectively, if you're familiar with Python but not Erlang, this is a deepcopy operation, but it's now FP works all the time.
+
+new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
+    {Inputs, Stack, dict:store(NewWord, {lists:reverse(Accum), Words}, Words)};
+
+Redefining that definition is utterly trivial. What's not immediately obvious is how to leverage it when you *see* the new word during `interpret`.
+
+Our current model is to just throw the replacement words back onto the input stack. As best I can tell, our only practical option is to call `real_evaluate/1` for the replacement words along with the words dictionary we stored when this word was defined. Whew.
+
+Let's give that a shot.
+
+interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
+  when is_list(ReplacementWords) ->
+    {RemainingInputs, real_evaluate({ReplacementWords, [], OlderWords}) ++ Stack, Words};
+
+And, that fails during testing.
+
+```        forth_tests: 32_can_consist_of_built_in_words_test...*failed*
+in function lists:split/2 (lists.erl, line 1444)
+  called as split(1,[])
+in call from forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 79)
+in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
+in call from forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 72)
+in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
+in call from forth_tests:'-32_can_consist_of_built_in_words_test/0-fun-0-'/0 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/test/forth_tests.erl, line 110)
+in call from eunit_test:'-mf_wrapper/2-fun-0-'/2 (eunit_test.erl, line 273)
+in call from eunit_test:run_testfun/1 (eunit_test.erl, line 71)
+**error:badarg
+  output:<<"">>```
+
+So let's start over. I re-enable direct invocation of my functions (sigh, Exercism) and test simple definition:
+
+> forth:evaluate(["1 2 : dupw 4 dup 3 ;  dupw"]).
+[1,2,3,4,4]
+
+So far, so good.
+
+Now, let's try the test that blew up my original plan:
+
+forth:evaluate([": foo 5 ;", ": bar foo ;", ": foo 6 ;",
+                                 "bar foo"]).
+[5,6]
+
+Brilliant! So the conceptual model worked. Now it's just a matter of zeroing in on what new, buggy behavior my change introduced.
+
+forth:evaluate([": dup-twice dup dup ;",
+                                 "1 dup-twice"]).
+** exception error: bad argument
+     in function  lists:split/2
+        called as lists:split(1,[])
+     in call from forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 79)
+     in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
+     in call from forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 72)
+     in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
