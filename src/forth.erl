@@ -65,27 +65,25 @@ default_words() ->
        {":",     {define,  undefined, fun new_word/4}}
       ]).
 
-new_word(Next, Inputs, Stack, Words) ->
-    new_word(Next, Inputs, Stack, Words, [], undefined).
+%% Ensure we fail if the input attempts to redefine numbers.
+new_word(Next, _Inputs, _Stack, _Words) when not is_list(Next) ->
+    {};
+new_word(Next, [H|T], Stack, Words) ->
+    new_word(H, T, Stack, Words, [], string:to_lower(Next)).
 
 %% This function will crash by design if ":" is found in the middle of
 %% a new definition.
-new_word(":", [H|T], Stack, Words, [], undefined) ->
-    new_word(H, T, Stack, Words, [], undefined);
-new_word(NewWord, _Inputs, _Stack, _Words, [], undefined)
-  when is_integer(NewWord) ->
+new_word(":", _Input, _Stack, _Words, _Accum, _NewWord) ->
     {};
-new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
-    new_word(H, T, Stack, Words, [], string:to_lower(NewWord));
 new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
     {Inputs, Stack, dict:store(NewWord, {custom, lists:reverse(Accum), Words}, Words)};
-new_word(Word, [H|T], Stack, Words, Accum, NewWord) ->
-    new_word(H, T, Stack, Words, [Word|Accum], NewWord).
+new_word(WordOrNumber, [H|T], Stack, Words, Accum, NewWord) ->
+    new_word(H, T, Stack, Words, [WordOrNumber|Accum], NewWord).
 
 
-interpret(Next, {ok, {define, undefined, BypassFun}}, Inputs, Stack, Words) ->
+interpret(_Next, {ok, {define, undefined, BypassFun}}, [H|T], Stack, Words) ->
     {InputTail, NewStack, NewWords} =
-        BypassFun(Next, Inputs, Stack, Words),
+        BypassFun(H, T, Stack, Words),
     {InputTail, NewStack, NewWords};
 interpret(_Next, {ok, {custom, Replacements, WordsSnapshot}}, Inputs, Stack, Words) ->
     {Inputs, lists:reverse(real_evaluate({Replacements, Stack, WordsSnapshot})), Words};
