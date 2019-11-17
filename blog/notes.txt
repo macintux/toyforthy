@@ -429,3 +429,15 @@ interpret(Next, error, RemainingInputs, Stack, Words)
 interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
     %% This word wasn't found in our dictionary.
     {}.
+
+Yet more specification-via-test fun: words are case insensitive.
+
+real_evaluate({[], Stack, _Words}) ->
+    lists:reverse(Stack);
+real_evaluate({[H|T], Stack, Words}) ->
+    real_evaluate(interpret(H, word_lookup(H, Words), T, Stack, Words)).
+
+word_lookup(Number, _Words) when is_integer(Number) ->
+    error;
+word_lookup(MaybeWord, Words) ->
+    dict:find(string:to_lower(MaybeWord), Words).

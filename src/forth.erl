@@ -96,4 +96,9 @@ evaluate(Instructions) ->
 real_evaluate({[], Stack, _Words}) ->
     lists:reverse(Stack);
 real_evaluate({[H|T], Stack, Words}) ->
-    real_evaluate(interpret(H, dict:find(H, Words), T, Stack, Words)).
+    real_evaluate(interpret(H, word_lookup(H, Words), T, Stack, Words)).
+
+word_lookup(Number, _Words) when is_integer(Number) ->
+    error;
+word_lookup(MaybeWord, Words) ->
+    dict:find(string:to_lower(MaybeWord), Words).
