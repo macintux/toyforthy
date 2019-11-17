@@ -462,3 +462,13 @@ This led me to discovering I had an extraneous function clause in
 interpret dating back to an early attempt to handle defining new
 words. That's a problem with Erlang: it's quite easy to have function
 heads that serve no purpose.
+
+----
+
+I had noticed that `new_word` was not nearly as clean as I liked it.
+
+Discuss "initialization" of functions, function clauses, accumulators,
+etc, and how new_word effectively had a multi-stage initialization
+that was collapsed by invoking it with the new word as its first
+argument instead of ":". This is why for a while I thought I might
+need an FSM.
