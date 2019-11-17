@@ -345,3 +345,18 @@ forth:evaluate([": dup-twice dup dup ;",
      in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
      in call from forth:interpret/5 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 72)
      in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 92)
+
+The error, despite its ungainliness, is surprisingly straightforward.
+
+One of the two calls to `dup` when `dup-twice` is invoked occurs with an empty stack. Specifically the built-in definition of `dup` expects a single argument, so on line 79 we see:
+
+```    {Args, StackTail} = lists:split(Arity, Stack),
+```
+
+And, sure enough, the problem is obvious: I defined my new call to `real_evaluate/1` with an empty stack. Silly mistake.
+
+The fix is simple, although I still need to figure out why I have to reverse the new stack.
+
+interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
+  when is_list(ReplacementWords) ->
+    {RemainingInputs, lists:reverse(real_evaluate({ReplacementWords, Stack, OlderWords})), Words};

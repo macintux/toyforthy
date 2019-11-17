@@ -1,7 +1,7 @@
 -module(forth).
 
 -export([evaluate/1]).
--compile(export_all).
+%% -compile(export_all).
 
 %% The inputs as provided by the Exercism tests try to make life
 %% easier to expressing word definitions as distinct strings. I would
@@ -69,7 +69,7 @@ interpret(Next, {ok, BypassFun}, RemainingInputs, Stack, Words)
     {InputTail, NewStack, NewWords};
 interpret(_Next, {ok, {ReplacementWords, OlderWords}}, RemainingInputs, Stack, Words)
   when is_list(ReplacementWords) ->
-    {RemainingInputs, real_evaluate({ReplacementWords, [], OlderWords}) ++ Stack, Words};
+    {RemainingInputs, lists:reverse(real_evaluate({ReplacementWords, Stack, OlderWords})), Words};
 interpret(_Next, {ok, {StackFun, ExecuteFun}}, RemainingInputs, Stack, Words)
   when is_function(StackFun) ->
     {ToProcess, StackTail} = StackFun(Stack),
