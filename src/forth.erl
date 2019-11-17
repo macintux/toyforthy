@@ -58,7 +58,7 @@ new_word(NewWord, _Inputs, _Stack, _Words, [], undefined)
   when is_integer(NewWord) ->
     {};
 new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
-    new_word(H, T, Stack, Words, [], NewWord);
+    new_word(H, T, Stack, Words, [], string:to_lower(NewWord));
 new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
     {Inputs, Stack, dict:store(NewWord, {lists:reverse(Accum), Words}, Words)};
 new_word(Word, [H|T], Stack, Words, Accum, NewWord) ->

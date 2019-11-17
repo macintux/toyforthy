@@ -441,3 +441,10 @@ word_lookup(Number, _Words) when is_integer(Number) ->
     error;
 word_lookup(MaybeWord, Words) ->
     dict:find(string:to_lower(MaybeWord), Words).
+
+And then there was one. A variation on the above: definitions are case insensitive too.
+
+new_word(NewWord, [H|T], Stack, Words, [], undefined) ->
+    new_word(H, T, Stack, Words, [], string:to_lower(NewWord));
+
+And there was much rejoicing.
