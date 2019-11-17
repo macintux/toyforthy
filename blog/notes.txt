@@ -407,3 +407,25 @@ forth:evaluate([": 1 2 ;"]).
      in call from forth:real_evaluate/1 (/Users/jdaily/Dropbox/Erlang/Exercism/erlang/forth/src/forth.erl, line 95)
 
 Anyway, we're not (yet?) writing this with actual users in mind, so let's keep making tests pass.
+
+The next one is simple: undefined words should not be placed on the stack (while numbers obviously should, so we want to maintain the distinction between words and numbers).
+
+interpret(Next, error, RemainingInputs, Stack, Words) ->
+    {RemainingInputs, [Next|Stack], Words}.
+
+The above clause was originally designed when I intended word definition to be possible as part of the normal `interpret` flow. Now that I have extract that into `new_word`, and now that I know Forth doesn't (or at least the test doesn't) allow for words to be placed on the stack, don't do that.
+
+(There's a way to place strings on the stack to be processed, but I don't remember off-hand what that might be, and again, I'm sure I'll find the test shortly that breaks after fixing this one.)
+
+interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
+    %% This word wasn't found in our dictionary.
+    {}.
+
+but of course I broke numbers, so...
+
+interpret(Next, error, RemainingInputs, Stack, Words)
+  when is_integer(Next) ->
+    {RemainingInputs, [Next|Stack], Words};
+interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
+    %% This word wasn't found in our dictionary.
+    {}.

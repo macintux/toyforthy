@@ -82,8 +82,12 @@ interpret(_Next, {ok, {Arity, Fun}}, RemainingInputs, Stack, Words) ->
     {Args, StackTail} = lists:split(Arity, Stack),
     {Result, NewWords} = Fun(Args, Words),
     {RemainingInputs, Result ++ StackTail, NewWords};
-interpret(Next, error, RemainingInputs, Stack, Words) ->
-    {RemainingInputs, [Next|Stack], Words}.
+interpret(Next, error, RemainingInputs, Stack, Words)
+  when is_integer(Next) ->
+    {RemainingInputs, [Next|Stack], Words};
+interpret(_Next, error, _RemainingInputs, _Stack, _Words) ->
+    %% This word wasn't found in our dictionary.
+    {}.
 
 
 evaluate(Instructions) ->
