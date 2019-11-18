@@ -33,6 +33,8 @@ maybe_convert_int(Str) ->
             Str
     end.
 
+%%%%% Word dictionary
+
 %% Our dictionary of words contains three types of values:
 
 %%   * Built-in words are a 3-tuple: `builtin`, arity and anonymous
@@ -79,6 +81,8 @@ new_word(";", Inputs, Stack, Words, Accum, NewWord) ->
     {Inputs, Stack, dict:store(NewWord, {custom, lists:reverse(Accum), Words}, Words)};
 new_word(WordOrNumber, [H|T], Stack, Words, Accum, NewWord) ->
     new_word(H, T, Stack, Words, [WordOrNumber|Accum], NewWord).
+
+%%%%% Interpreter
 
 %% `interpret/5` takes:
 %%
